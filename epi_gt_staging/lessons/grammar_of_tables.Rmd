@@ -1,0 +1,723 @@
+---
+title: "Grammar of Tables"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    highlight: kate
+    css: !expr here::here("global/style/style.css")
+date: "2023-09-10"
+editor_options:
+  markdown:
+    wrap: 72
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Very often in Epi-reports, it's quite necessary to produce tqbles that convey the information in the most efficiecnt way. In this lesson we will do that using R and the grammar of tables package.
+
+## Learning objectives
+
+-   Use gt() to create simple table
+
+    -   Title and subtitle
+
+    -   Format percentages and round decimals
+
+-   Conditional coloring
+
+    -   Numeric/continuous data
+
+        -   Scale to range of values in your data (for continuous/sequential range)
+
+        -   Discrete color scale (set numeric ranges for each color)
+
+    -   Discrete/categorical data
+
+        -   Color by text string/factor level (e.g., met, partially met, not met)
+
+-   Format text by value (font color, bold,etc.)
+
+-   Stratified tables (By age group or sex or both)
+
+    -   Preparing data for stratified table
+
+    -   Stub and stub head, spanner columns
+
+-   External resources for further customization
+
+    -   Color palettes
+
+    -   Borders
+
+    -   kableExtra
+
+## Packages covered in this lesson
+
+In this lesson, we will use the following packages:
+
+-   \`gt\`
+
+-   `dplyr` , `tidyr` , and \`purrr\`.
+
+-   `janitor`
+
+-   `KableExtra`
+
+-   `Paletteer` , `ggsci`
+
+## Introduction to the dataset
+
+We will use data from **Malawi HIV Program** during the four quarters of 2019, you can access the data yourself [here](https://dms.hiv.health.gov.mw/dataset/?tags=HIV&res_format=XLSX&year=2019).
+
+First let's import the the 4 datasets at once.
+
+```{r echo=FALSE, message=TRUE, warning=TRUE}
+# load libraries
+library(tidyverse)
+library(gt)
+
+# load, unite, and clean data
+files <- list.files(path=here::here("data", "raw"), full.names = T)
+
+data <- map(files, function(x) readxl::read_xlsx(x))
+
+data_united <- data |> 
+  bind_rows() |> 
+  janitor::clean_names()
+
+```
+
+Second, let's see how this data looks like :
+
+```{r}
+data_united |> 
+  glimpse()
+```
+
+For the sake of convenience, we will summarize the data by quarter and region, and keep only
+
+```{r}
+summarized_data <- data_united |> 
+  group_by(
+    zone,
+    period
+  ) |> 
+  summarise(
+    across(
+      .cols = c(
+        previous_negative, 
+        previous_positive, 
+        new_negative, 
+        new_positive,
+        hiv_status_not_ascertained,  
+      ),
+      \(x) sum(x, na.rm = T) 
+    )
+  )
+```
+
+## Creating simple tables
+
+### The grammar and components of a table
+
+\`gt\` is an R package that produce publication-ready table, this package is based on an idiom called the grammar of tables that allows the user to describe the components of any table in a consistent manner, think of it as the ggplot2 for tables. So, in order to start using the package we need to understand the basics of this grammar.
+
+![](images/gt_parts_of_a_table.svg)
+
+As seen in the figure from the package website, the \`gt\` package considers any table with the following components:
+
+-   he Table Header (optional; with a title and possibly a subtitle)
+
+-   the Stub and the Stub Head (optional; contains row labels, optionally within row groups having row group labels and possibly summary labels when a summary is present)
+
+-   the Column Labels (contains column labels, optionally under spanner column labels)
+
+-   the Table Body (contains columns and rows of cells)
+
+-   the Table Footer (optional; possibly with footnotes and source notes)
+
+So now we will use this knowledge and combine it the syntax of the package to actually make tables you can be proud of.
+
+### A simple table
+
+To create a simple table from the data we got, we can simply call the `gt()` function :
+
+```{r}
+summarized_data |> 
+  gt()
+```
+
+You can see already that the table is quite raw , a bit more presentable than the output in R's console, but also two letters away compared to what it's required to produce it in excel.
+
+#### Adding details to the table
+
+We need to add more details to the table, like a title and subtitle, we can do that simply by using the function `tab_heade`: and specify the `title` and `subtitle` arguments, we can also add the source of the data in a footnote:
+
+```{r}
+summarized_data |> 
+  gt() |> 
+  tab_header(
+    title = "Sum of cases of HIV in Malawi",
+    subtitle = "from Q1 2019 to Q2 2019"
+  ) |> 
+  tab_source_note("Data from the Malawi HIV Program")
+```
+
+#### Formatting the values in the table
+
+Great, now we know how to make a simple gt table and more details to it. However, since we got a relatively large table with different kind of information it can be useful to use some color scaling to add some explanatory visual effect, say for example we want the cells with highest values in the new_positive column to be different from the ones with lowest values, this, can be done in few lines of code:
+
+```{r}
+summarized_data |> 
+  gt() |> 
+  tab_header(
+    title = "Sum of cases of HIV in Malawi",
+    subtitle = "from Q1 2019 to Q2 2019"
+  ) |> 
+  tab_source_note("Data from the Malawi HIV Program") |> 
+  data_color(
+    columns = new_positive,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::red_material", n = 10)),
+      domain = NULL
+    )
+  )
+```
+
+This new function `gt::data_color` seems a bit intimidating at first, but the logic is straightforward:
+
+-   we specify the column we want to format it's colors in the `columns` argument. We can specify more than one column if the formatting is the same for each of them using c(...).
+
+-   we specify a palette of colors, the content of which should be characters in the hexadecimal format of color identification (eg : "#FFEBED99"). Fortunately we don't have to do this manually, although we could, we use the `paletteer` package to determine these values.
+
+-   The `paletteer` package accepts value from other coloration packages, in our case we used `ggsci` . We defined the number of color shade to use(n = 10) and we passed all that to `as.character` to make sure that the vector of color values to be passed to the `data_color` function is a vector of characters eventually.
+
+We can do this for the `new_negative` column for example, we can use a different kind of palette, I'm using for this case the green palette from the same package: [`ggsci::green_material`](https://github.com/nanxstats/ggsci) , you can find all the palettes included in the `paletteer` package in [here](https://emilhvitfeldt.github.io/paletteer/#included-packages).
+
+```{r}
+summarized_data |> 
+  gt() |> 
+  tab_header(
+    title = "Sum of cases of HIV in Malawi",
+    subtitle = "from Q1 2019 to Q2 2019"
+  ) |> 
+  tab_source_note("Data from the Malawi HIV Program") |> 
+  data_color(
+    columns = new_positive,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::red_material", n = 10)),
+      domain = NULL
+    )
+  ) |> 
+  data_color(
+    columns = new_negative,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::green_material",n = 10)),
+      domain = NULL
+    )
+  ) 
+  
+```
+
+We can also set up the table to conditionally change the color of the text in the table depending on the value of that text. In this following case we wanted to highlight values in the column previous positive according to a threshold, if the value is greater than 2000 then the text color should be red, if it's less than 2000 then the text color should be green, we also added the styling bold to the text as well. It's the same process, the only difference is that we specify the condition of the formatting in the `locations` function using the `row` argument.
+
+```{r}
+summarized_data |> 
+  gt() |> 
+  tab_header(
+    title = "Sum of cases of HIV in Malawi",
+    subtitle = "from Q1 2019 to Q2 2019"
+  ) |> 
+  tab_source_note("Data from the Malawi HIV Program") |> 
+  data_color(
+    columns = new_positive,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::red_material", n = 10)),
+      domain = NULL
+    )
+  ) |> 
+  data_color(
+    columns = new_negative,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::green_material",n = 10)),
+      domain = NULL
+    )
+  ) |> 
+  tab_style(
+    style = cell_text(
+      color = "red",
+      weight = "bold",
+    ),
+    locations = cells_body(
+      columns = previous_positive,
+      rows = previous_positive > 2000
+    )
+  )|> 
+  tab_style(
+    style = cell_text(
+      color = "green",
+      weight = "bold",
+    ),
+    locations = cells_body(
+      columns = previous_positive,
+      rows = previous_positive < 2000
+    )
+  )
+```
+
+#### Fonts and text
+
+Now is a good time to add some customization to the text in the table. We can do that via the function `gt::tab_style`. We can use this function not only to change the values in table's body, but also to any other part of it as well.
+
+Let's change the font and color of the title and the subtitle for example, I'm choosing to use the `Yanone Kaffeesatz` font from google. Google fonts provide you with hundreds of thousands of fonts and styles to choose from that can be more interesting than the boring rigid excel fonts.
+
+In order to do that, we need to specify some details in `gt::tab_style` function:
+
+-   We assign a list to the argument `style`.
+
+-   In that list we specify that we are editing text (i.e table specific values, not borders or shapes) using the function `cell_text`.
+
+-   Inside `cell_text` we specify the details we want, i.e the font and the color
+
+-   Finally, we add another argument to the `tab_style` function that depict the location of these changes or specifications, in our case it's the title and the sub_title, so we assign list to the `locations` argument that contains the function `cells_title` which specifies the location of these changes we've done using the syntax below.
+
+-   Note that in order to make changes to the appearance of either the title or subtitle, you can simple use : `locations = list(cells_title(groups = "title"))` to apply changes to the title, or `locations = list(cells_title(groups = "subtitle"))` , to apply changes to the subtitle without the need to use `c(…)` .
+
+```{r}
+summarized_data |> 
+  gt() |> 
+  tab_header(
+    title = "Sum of cases of HIV in Malawi",
+    subtitle = "from Q1 2019 to Q2 2019"
+  ) |> 
+  tab_source_note("Data from the Malawi HIV Program") |> 
+  data_color(
+    columns = new_positive,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::red_material", n = 10)),
+      domain = NULL
+    )
+  ) |> 
+  data_color(
+    columns = new_negative,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::green_material",n = 10)),
+      domain = NULL
+    )
+  ) |> 
+  tab_style(
+    style = cell_text(
+      color = "red",
+      weight = "bold",
+    ),
+    locations = cells_body(
+      columns = previous_positive,
+      rows = previous_positive > 2000
+    )
+  )|> 
+  tab_style(
+    style = cell_text(
+      color = "green",
+      weight = "bold",
+    ),
+    locations = cells_body(
+      columns = previous_positive,
+      rows = previous_positive < 2000
+    )
+  )|> 
+  tab_style(
+      style = list(
+        cell_text(
+          font = google_font(name = 'Yanone Kaffeesatz'), 
+          color = "#22668D"
+        )
+      ),
+      locations = list(
+        cells_title(groups = c("title", "subtitle"))
+      )
+  )
+    
+  
+```
+
+Additionally, we can conduct the same changes to the column labels and the rows labels as well, all we need to do is to correctly specify the location of the changes we want to make, except that this time we are changing the background color(or fill color) of the cells we are going to change. We can use that by adding another style function `cell_fill` where we provide the color we want for the background of our cells. lastly, in the `locations` argument, and similar to the `style` argument, we assign a list in which we provide the location information of the changes we want done using the `cells_column_labels` function, where we specify which column labels we want to change, in this case all of them, thus we pass the function `columns = everything()` .
+
+```{r}
+summarized_data |> 
+  gt() |> 
+  tab_header(
+    title = "Sum of cases of HIV in Malawi",
+    subtitle = "from Q1 2019 to Q2 2019"
+  ) |> 
+  tab_source_note("Data from the Malawi HIV Program") |> 
+  data_color(
+    columns = new_positive,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::red_material", n = 10)),
+      domain = NULL
+    )
+  ) |> 
+  data_color(
+    columns = new_negative,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::green_material",n = 10)),
+      domain = NULL
+    )
+  ) |> 
+  tab_style(
+    style = cell_text(
+      color = "red",
+      weight = "bold",
+    ),
+    locations = cells_body(
+      columns = previous_positive,
+      rows = previous_positive > 2000
+    )
+  )|> 
+  tab_style(
+    style = cell_text(
+      color = "green",
+      weight = "bold",
+    ),
+    locations = cells_body(
+      columns = previous_positive,
+      rows = previous_positive < 2000
+    )
+  ) |> 
+  tab_style(
+      style = list(
+        cell_text(
+          font = google_font(name = 'Yanone Kaffeesatz'), 
+          color = "#22668D"
+        )
+      ),
+      locations = list(
+        cells_title(groups = c("title", "subtitle"))
+      )
+  ) |> 
+  tab_style(
+    style = list(
+      cell_text(
+        font = google_font(name = "Righteous"),
+        color = "#57375D"
+      ),
+      cell_fill(color = "#F2E8C6")
+    ),
+    locations = list(
+      cells_column_labels(columns = everything())
+    )
+  )
+    
+```
+
+In a similar manner we can do the same thing to the group rows and the periods, all we need to do is add them to locations argument using `cells_rows_groups` for the group rows, and `cells_body` for the rest of the period column as follows:
+
+```{r}
+summarized_data |> 
+  gt() |> 
+  tab_header(
+    title = "Sum of cases of HIV in Malawi",
+    subtitle = "from Q1 2019 to Q2 2019"
+  ) |> 
+  tab_source_note("Data from the Malawi HIV Program") |> 
+  data_color(
+    columns = new_positive,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::red_material", n = 10)),
+      domain = NULL
+    )
+  ) |> 
+  data_color(
+    columns = new_negative,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::green_material",n = 10)),
+      domain = NULL
+    )
+  )|> 
+  tab_style(
+    style = cell_text(
+      color = "red",
+      weight = "bold",
+    ),
+    locations = cells_body(
+      columns = previous_positive,
+      rows = previous_positive > 2000
+    )
+  )|> 
+  tab_style(
+    style = cell_text(
+      color = "green",
+      weight = "bold",
+    ),
+    locations = cells_body(
+      columns = previous_positive,
+      rows = previous_positive < 2000
+    )
+  ) |> 
+  tab_style(
+      style = list(
+        cell_text(
+          font = google_font(name = 'Yanone Kaffeesatz'), 
+          color = "#22668D"
+        )
+      ),
+      locations = list(
+        cells_title(groups = c("title", "subtitle"))
+      )
+  ) |> 
+  tab_style(
+    style = list(
+      cell_text(
+        font = google_font(name = "Righteous"),
+        color = "#57375D"
+      ),
+      cell_fill(color = "#F2E8C6")
+    ),
+    locations = list(
+      cells_column_labels(columns = everything()),
+      cells_row_groups(groups = everything()),
+      cells_body(columns = period)
+    )
+  )
+
+```
+
+The idea behind what we've done here is to give you control on what YOU want to achieve and not an example of what you have to do exactly, there's endless ways to customize a `gt` table, it's up to you to choose what you need, and what works for your workflow.
+
+### Stratifying tables by groups
+
+#### Spanner columns
+
+Spanners are very useful to include in a table, they basically help us read the table and contextualize the information within by grouping columns together. In our case for example we have two groups, previous and new HIV test outcomes.
+
+Since 4 of our columns are conveniently named: [previous/new \_ negative/poitive ] *.* We can use this to our advantage to easily create spanners using the delimitation '\_*'* to differentiate between the spanner label and the column label by means of the *`tab`*`_spanner_delim` function:
+
+```{r}
+summarized_data |> 
+  gt() |> 
+  tab_header(
+    title = "Sum of cases of HIV in Malawi",
+    subtitle = "from Q1 2019 to Q2 2019"
+  ) |> 
+  tab_source_note("Data from the Malawi HIV Program") |> 
+  data_color(
+    columns = new_positive,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::red_material", n = 10)),
+      domain = NULL
+    )
+  ) |> 
+  data_color(
+    columns = new_negative,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::green_material",n = 10)),
+      domain = NULL
+    )
+  )|> 
+  tab_style(
+    style = cell_text(
+      color = "red",
+      weight = "bold",
+    ),
+    locations = cells_body(
+      columns = previous_positive,
+      rows = previous_positive > 2000
+    )
+  )|> 
+  tab_style(
+    style = cell_text(
+      color = "green",
+      weight = "bold",
+    ),
+    locations = cells_body(
+      columns = previous_positive,
+      rows = previous_positive < 2000
+    )
+  ) |> 
+  tab_style(
+      style = list(
+        cell_text(
+          font = google_font(name = 'Yanone Kaffeesatz'), 
+          color = "#22668D"
+        )
+      ),
+      locations = list(
+        cells_title(groups = c("title", "subtitle"))
+      )
+  ) |> 
+  tab_style(
+    style = list(
+      cell_text(
+        font = google_font(name = "Righteous"),
+        color = "#57375D"
+      ),
+      cell_fill(color = "#F2E8C6")
+    ),
+    locations = list(
+      cells_column_labels(columns = everything()),
+      cells_row_groups(groups = everything()),
+      cells_body(columns = period)
+    )
+  ) |> 
+  tab_spanner_delim(delim = "_", columns = 3:6)
+  # This is another way to create the spanners as well
+  # tab_spanner(
+  #   label = "New Cases", columns = c(new_negative, new_positive)
+  # ) |> 
+  # tab_spanner(
+  #   label = "Previous Cases", columns = c(previous_negative, previous_positive)
+  # ) |> 
+
+  
+```
+
+As you can see, the styling is off with the spanners, that's because we didn't specify any. We can simply change that in two ways, either we change the location of spanner line before the styling line(see the comments below) and then simply specify spanners in the `locations` argument using the same styling of the column and row labels. Or we can create a new styling just for the spanners. to keep things simple we will go with the first solution and change the location of the spanners code and add its location to the styling we already have.
+
+```{r}
+summarized_data |> 
+  gt() |> 
+  tab_header(
+    title = "Sum of cases of HIV in Malawi",
+    subtitle = "from Q1 2019 to Q2 2019"
+  ) |> 
+  tab_source_note("Data from the Malawi HIV Program") |> 
+  data_color(
+    columns = new_positive,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::red_material", n = 10)),
+      domain = NULL
+    )
+  ) |> 
+  data_color(
+    columns = new_negative,
+    fn = scales::col_numeric(
+      palette = as.character(paletteer::paletteer_d("ggsci::green_material",n = 10)),
+      domain = NULL
+    )
+  )|> 
+  tab_style(
+    style = cell_text(
+      color = "red",
+      weight = "bold",
+    ),
+    locations = cells_body(
+      columns = previous_positive,
+      rows = previous_positive > 2000
+    )
+  )|> 
+  tab_style(
+    style = cell_text(
+      color = "green",
+      weight = "bold",
+    ),
+    locations = cells_body(
+      columns = previous_positive,
+      rows = previous_positive < 2000
+    )
+  ) |> 
+  tab_style(
+      style = list(
+        cell_text(
+          font = google_font(name = 'Yanone Kaffeesatz'), 
+          color = "#22668D"
+        )
+      ),
+      locations = list(
+        cells_title(groups = c("title", "subtitle"))
+      )
+  ) |> 
+  tab_spanner_delim(delim = "_", columns = 3:6) |> 
+  # this is the styling code for the column and row labels
+  tab_style(
+    style = list(
+      cell_text(
+        font = google_font(name = "Righteous"),
+        color = "#57375D"
+      ),
+      cell_fill(color = "#F2E8C6")
+    ),
+    locations = list(
+      cells_column_labels(columns = everything()),
+      cells_row_groups(groups = everything()),
+      cells_body(columns = period),
+      ## adding the spanners location
+      cells_column_spanners(spanners = everything())
+    )
+  ) 
+  # In case we want to have different styling for the spanners we can run this.
+  # tab_spanner_delim(delim = "_", columns = 3:6) |> 
+  # tab_style(
+  #   style = list(
+  #     cell_text(
+  #       font = google_font(name = "Righteous"),
+  #       color = "#57375D"
+  #     ),
+  #     cell_fill(color = "#F2E8C6")
+  #     ),
+  #   locations = list(
+  #     cells_column_spanners(spanners = everything())
+  #     )
+  #   ) 
+```
+
+### Bonus knowledge: `KableExtra`
+
+As we've seen how flexible and powerful `gt` can be to make really nice looking tables(we didn't even scratch the surface of the possibilities). One can also refer to `KableExtra` instead. It's another R package that's table-centered.
+
+The simplest way to create a Kable table, is using the `kbl()` function
+
+```{r}
+library(kableExtra)
+
+summarized_data |> 
+  kbl()
+
+```
+
+Additionally we can style it to look like a scientific table if we want to using the `kable_classic` function:
+
+```{r}
+summarized_data |> 
+  kbl() |> 
+  kable_classic()
+
+```
+
+We can also add a caption to the table using the `caption` argument in the `kbl()` function, as well as the font and the general size of the table using respectively the `html_font` and `full_width` arguments of the `kable_classic` function.
+
+```{r}
+summarized_data |> 
+  kbl(caption = "Same table, different trick") |> 
+  kable_classic(full_width = F, html_font = "Cambria")
+```
+
+We can also go for a more simple style for the table using the `kable_material` function
+
+```{r}
+summarized_data |> 
+  kbl(caption = "Same table, different trick") |> 
+  kable_material(c('striped','hover'), html_font = "Cambria", full_width = F)
+```
+
+The idea here is to show how many options you got to make a really nice table, the details of `kableExtra` are beyond the scope of this lesson, but it 's important to be familiar with it along `gt`.
+
+### Wrap up
+
+In this lesson we discovered how to create publication-ready tables in `gt` (and a bit less in `kableExtra`), we learned about the ideoms of the grammar of table, we formatted data to the proper format, used gt to create a table, and manipulated the components of that table to our need and style. This is not however an exhaustive list of what you can do with `gt` but a mere example on the potential of your final product should you choose to invest in learning the package.
+
+## External resources and packages
+
+-   The definite cookbook of `gt` by Tom Mock : <https://themockup.blog/static/resources/gt-cookbook.html#introduction>
+
+-   the Grammar of Table article : <https://themockup.blog/posts/2020-05-16-gt-a-grammar-of-tables/#add-titles>
+
+-   official `gt` documentation page : <https://gt.rstudio.com/articles/intro-creating-gt-tables.html>
+
+-   Create Awesome HTML Table with knitr::kable and kableExtra book by Hao Zhu : <https://cran.r-project.org/web/packages/kableExtra/vignettes/awesome_table_in_html.html#Overview>

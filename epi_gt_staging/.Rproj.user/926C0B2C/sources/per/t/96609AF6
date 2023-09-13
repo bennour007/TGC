@@ -1,0 +1,32 @@
+{
+    "id": "96609AF6",
+    "path": "~/Documents/TGC/epi_reports_staging/lessons/grammar_of_tables.Rmd",
+    "project_path": "lessons/grammar_of_tables.Rmd",
+    "type": "r_markdown",
+    "hash": "2270561975",
+    "contents": "",
+    "dirty": false,
+    "created": 1694602367203.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "chunk_output_type": "console",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "127,0",
+        "scrollLine": "55",
+        "rmdVisualMode": "true",
+        "rmdVisualWrapConfigured": "true",
+        "docOutlineVisible": "1",
+        "rmdVisualModeLocation": "2805:2650",
+        "rmdVisualCollapsedChunks": ""
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1694602670,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1694602670375,
+    "read_only": false,
+    "read_only_alternatives": []
+}
